@@ -1,0 +1,941 @@
+<!-- Weight Loss Contest Tracker -->
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>The 10 lb Challenge</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+
+<style>
+  :root {
+    --bg: #f5f2ec;
+    --paper: #ffffff;
+    --ink: #1c1b19;
+    --muted: #807c74;
+    --line: #e4dfd5;
+    --a: #0f766e;        /* competitor A — teal */
+    --a-soft: #d9efec;
+    --b: #d9760a;        /* competitor B — amber */
+    --b-soft: #f8e6cf;
+    --good: #15803d;
+    --shadow: 0 1px 2px rgba(28,27,25,.04), 0 8px 24px rgba(28,27,25,.05);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Archivo', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+    padding: 28px 18px 64px;
+  }
+
+  .wrap { max-width: 880px; margin: 0 auto; }
+
+  /* ---------- Header ---------- */
+  header { margin-bottom: 26px; }
+  .eyebrow {
+    font-size: 12px; font-weight: 700; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--muted); margin-bottom: 6px;
+  }
+  h1 {
+    font-size: clamp(30px, 6vw, 46px); font-weight: 800;
+    letter-spacing: -.02em; line-height: 1; display: flex;
+    align-items: baseline; gap: 12px; flex-wrap: wrap;
+  }
+  h1 .goal { color: var(--a); }
+  .sub { color: var(--muted); font-size: 14px; margin-top: 8px; }
+
+  /* ---------- Cards ---------- */
+  .card {
+    background: var(--paper); border: 1px solid var(--line);
+    border-radius: 16px; box-shadow: var(--shadow);
+  }
+
+  .grid2 {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 16px; margin-bottom: 16px;
+  }
+  @media (max-width: 620px) { .grid2 { grid-template-columns: 1fr; } }
+
+  .scorecard { padding: 20px 22px; position: relative; overflow: hidden; }
+  .scorecard::before {
+    content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 5px;
+  }
+  .scorecard.a::before { background: var(--a); }
+  .scorecard.b::before { background: var(--b); }
+
+  .name-row { display: flex; align-items: center; gap: 9px; margin-bottom: 14px; }
+  .dot { width: 11px; height: 11px; border-radius: 50%; flex: none; }
+  .a .dot { background: var(--a); } .b .dot { background: var(--b); }
+  .name { font-weight: 700; font-size: 17px; letter-spacing: -.01em; }
+  .pace {
+    margin-left: auto; font-size: 11px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .06em;
+    padding: 3px 9px; border-radius: 999px;
+  }
+  .pace.win  { background: var(--a-soft); color: var(--a); }
+  .pace.bwin { background: var(--b-soft); color: var(--b); }
+  .pace.even { background: #ece9e1; color: var(--muted); }
+  .pace.done { background: #dcf0e1; color: var(--good); }
+
+  .big {
+    font-size: 42px; font-weight: 800; letter-spacing: -.03em;
+    line-height: 1; font-variant-numeric: tabular-nums;
+  }
+  .big small { font-size: 15px; font-weight: 600; color: var(--muted); }
+  .lost { font-size: 13px; color: var(--muted); margin-top: 7px; }
+  .lost b { color: var(--ink); font-weight: 700; }
+
+  .bar {
+    height: 8px; background: #ece9e1; border-radius: 999px;
+    margin-top: 16px; overflow: hidden;
+  }
+  .bar > span {
+    display: block; height: 100%; border-radius: 999px;
+    transition: width .6s cubic-bezier(.2,.7,.2,1);
+  }
+  .a .bar > span { background: var(--a); }
+  .b .bar > span { background: var(--b); }
+  .bar-label {
+    display: flex; justify-content: space-between;
+    font-size: 11px; color: var(--muted); margin-top: 7px; font-weight: 600;
+  }
+
+  /* ---------- Sections ---------- */
+  .section { padding: 22px; margin-bottom: 16px; }
+  .section h2 {
+    font-size: 13px; font-weight: 700; letter-spacing: .12em;
+    text-transform: uppercase; color: var(--muted); margin-bottom: 18px;
+  }
+
+  /* ---------- Inputs ---------- */
+  label.fld { display: block; }
+  .fld .lab {
+    font-size: 12px; font-weight: 600; color: var(--muted);
+    margin-bottom: 6px; display: block;
+  }
+  input[type="text"], input[type="number"] {
+    width: 100%; font-family: inherit; font-size: 16px; font-weight: 600;
+    color: var(--ink); background: #faf8f3; border: 1px solid var(--line);
+    border-radius: 10px; padding: 12px 14px; outline: none;
+    transition: border-color .15s, background .15s;
+  }
+  input:focus { border-color: var(--a); background: #fff; }
+
+  button {
+    font-family: inherit; font-weight: 700; font-size: 15px;
+    border: none; border-radius: 10px; padding: 13px 22px;
+    cursor: pointer; transition: transform .12s, opacity .15s, background .15s;
+  }
+  button:active { transform: translateY(1px); }
+  .btn-primary { background: var(--ink); color: #fff; }
+  .btn-primary:hover { background: #000; }
+  .btn-ghost {
+    background: transparent; color: var(--muted);
+    border: 1px solid var(--line); font-size: 13px; padding: 9px 16px;
+  }
+  .btn-ghost:hover { color: var(--ink); border-color: var(--muted); }
+
+  .input-row {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px;
+  }
+  @media (max-width: 620px) { .input-row { grid-template-columns: 1fr; } }
+
+  .weekflag {
+    display: inline-block; font-size: 12px; font-weight: 700;
+    color: var(--a); background: var(--a-soft);
+    padding: 5px 12px; border-radius: 999px; margin-bottom: 16px;
+    letter-spacing: .03em;
+  }
+
+  /* ---------- Chart ---------- */
+  .chart-box { padding: 22px 18px 16px; margin-bottom: 16px; }
+  .chart-wrap { position: relative; height: 320px; }
+  @media (max-width: 620px) { .chart-wrap { height: 260px; } }
+
+  /* ---------- Table ---------- */
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td {
+    text-align: right; padding: 11px 10px;
+    border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums;
+  }
+  th { font-size: 11px; text-transform: uppercase; letter-spacing: .08em;
+       color: var(--muted); font-weight: 700; }
+  th:first-child, td:first-child { text-align: left; }
+  tbody tr:last-child td { border-bottom: none; }
+  td .delta { font-size: 12px; font-weight: 600; }
+  .down { color: var(--good); } .up { color: #b4471a; }
+
+  .foot {
+    display: flex; justify-content: space-between; align-items: center;
+    flex-wrap: wrap; gap: 12px; margin-top: 8px;
+  }
+  .note { font-size: 12px; color: var(--muted); max-width: 460px; line-height: 1.5; }
+
+  .hidden { display: none !important; }
+  .center { text-align: center; }
+  .empty { color: var(--muted); font-size: 14px; padding: 30px 0; text-align: center; }
+
+  /* ---------- Setup ---------- */
+  #setup .person-block {
+    border: 1px solid var(--line); border-radius: 14px;
+    padding: 18px; margin-bottom: 14px; background: #faf8f3;
+  }
+  #setup .person-block .ph {
+    display: flex; align-items: center; gap: 9px;
+    font-weight: 700; margin-bottom: 14px; font-size: 15px;
+  }
+  .toast {
+    position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%) translateY(20px);
+    background: var(--ink); color: #fff; padding: 12px 22px; border-radius: 999px;
+    font-size: 14px; font-weight: 600; opacity: 0; pointer-events: none;
+    transition: opacity .25s, transform .25s; z-index: 50;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* ---------- Sync bar ---------- */
+  .syncbar {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    background: var(--paper); border: 1px solid var(--line);
+    border-radius: 12px; padding: 11px 16px; margin-bottom: 16px;
+    box-shadow: var(--shadow); font-size: 13px;
+  }
+  .syncdot {
+    width: 9px; height: 9px; border-radius: 50%; flex: none;
+    background: var(--muted);
+  }
+  .syncdot.ok   { background: var(--good); }
+  .syncdot.work { background: var(--b); animation: pulse 1s infinite; }
+  .syncdot.off  { background: #b4471a; }
+  @keyframes pulse { 50% { opacity: .35; } }
+  #syncText { font-weight: 600; color: var(--ink); }
+  #syncText .meta { color: var(--muted); font-weight: 500; }
+  .syncbtn {
+    margin-left: auto; font-family: inherit; font-weight: 700; font-size: 12.5px;
+    border: none; border-radius: 8px; padding: 8px 14px; cursor: pointer;
+    background: var(--ink); color: #fff;
+  }
+  .syncbtn.ghost {
+    background: transparent; color: var(--muted);
+    border: 1px solid var(--line); margin-left: 0;
+  }
+  .syncbtn.ghost:hover { color: var(--ink); border-color: var(--muted); }
+  .synclink {
+    flex-basis: 100%; font-size: 12px; color: var(--a);
+    word-break: break-all; text-decoration: none; font-weight: 600;
+  }
+  .manual {
+    background: var(--paper); border: 1px solid var(--line);
+    border-radius: 12px; margin-bottom: 16px; box-shadow: var(--shadow);
+    font-size: 13px;
+  }
+  .manual summary {
+    cursor: pointer; padding: 12px 16px; font-weight: 600;
+    color: var(--muted); list-style: none;
+  }
+  .manual summary::-webkit-details-marker { display: none; }
+  .manual summary::before { content: "+ "; font-weight: 800; }
+  .manual[open] summary::before { content: "\2212 "; }
+  .manual .inner { padding: 0 16px 16px; }
+  .mhelp { color: var(--muted); font-size: 12.5px; line-height: 1.5; margin-bottom: 10px; }
+  .codebox {
+    width: 100%; height: 70px; font-family: ui-monospace, Menlo, monospace;
+    font-size: 12px; border: 1px solid var(--line); border-radius: 8px;
+    padding: 10px; resize: vertical; background: #faf8f3; color: var(--ink);
+  }
+  .mrow { display: flex; gap: 8px; margin-top: 10px; }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Head&#8209;to&#8209;head challenge</div>
+    <h1>The <span class="goal">10&nbsp;lb</span> Showdown</h1>
+    <div class="sub" id="subline">Loading&hellip;</div>
+  </header>
+
+  <!-- ============ SYNC BAR ============ -->
+  <div id="syncBar" class="syncbar">
+    <span class="syncdot" id="syncDot"></span>
+    <span id="syncText">Setting up&hellip;</span>
+    <button class="syncbtn" id="shareBtn" style="display:none">Create shared link</button>
+    <button class="syncbtn ghost" id="copyBtn" style="display:none">Copy invite link</button>
+    <a class="synclink" id="syncLink" style="display:none" target="_blank" rel="noopener"></a>
+  </div>
+
+  <details class="manual" id="manualSync">
+    <summary>Sync trouble? Use a backup code</summary>
+    <div class="inner">
+      <p class="mhelp">If the auto&#8209;sync ever can&rsquo;t connect, you can still sync by hand:
+        press <b>Copy my code</b>, send it to the other person, and have them paste it
+        below and press <b>Apply pasted code</b>. It merges both of your numbers.</p>
+      <textarea class="codebox" id="codeBox" placeholder="Paste a backup code here, then press Apply pasted code"></textarea>
+      <div class="mrow">
+        <button class="syncbtn ghost" id="exportBtn">Copy my code</button>
+        <button class="syncbtn ghost" id="importBtn">Apply pasted code</button>
+      </div>
+    </div>
+  </details>
+
+  <!-- ============ SETUP ============ -->
+  <div id="setup" class="section card hidden">
+    <h2>Set up the contest</h2>
+
+    <div class="person-block">
+      <div class="ph"><span class="dot" style="background:var(--a)"></span>Competitor 1</div>
+      <div class="input-row" style="margin-bottom:0">
+        <label class="fld"><span class="lab">Name</span>
+          <input type="text" id="n0" placeholder="e.g. Jim" autocomplete="off" /></label>
+        <label class="fld"><span class="lab">Starting weight (lbs)</span>
+          <input type="number" id="w0" placeholder="0" step="0.1" inputmode="decimal" /></label>
+      </div>
+    </div>
+
+    <div class="person-block">
+      <div class="ph"><span class="dot" style="background:var(--b)"></span>Competitor 2</div>
+      <div class="input-row" style="margin-bottom:0">
+        <label class="fld"><span class="lab">Name</span>
+          <input type="text" id="n1" placeholder="e.g. Coworker" autocomplete="off" /></label>
+        <label class="fld"><span class="lab">Starting weight (lbs)</span>
+          <input type="number" id="w1" placeholder="0" step="0.1" inputmode="decimal" /></label>
+      </div>
+    </div>
+
+    <div class="input-row" style="grid-template-columns:1fr">
+      <label class="fld"><span class="lab">Goal — pounds to lose each</span>
+        <input type="number" id="goal" value="10" step="0.5" inputmode="decimal" /></label>
+    </div>
+
+    <button class="btn-primary" id="startBtn" style="width:100%">Start the challenge</button>
+  </div>
+
+  <!-- ============ DASHBOARD ============ -->
+  <div id="dash" class="hidden">
+
+    <div class="grid2" id="scorecards"></div>
+
+    <div class="section card">
+      <h2>Log this week&rsquo;s weigh&#8209;in</h2>
+      <div class="weekflag" id="weekFlag">Week 1</div>
+      <div class="input-row" id="weighInputs"></div>
+      <button class="btn-primary" id="logBtn" style="width:100%">Save weigh&#8209;in</button>
+    </div>
+
+    <div class="chart-box card">
+      <h2 style="font-size:13px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:14px;padding:0 4px">Progress vs. target</h2>
+      <div class="chart-wrap"><canvas id="chart"></canvas></div>
+    </div>
+
+    <div class="section card">
+      <h2>Week by week</h2>
+      <div id="tableArea"></div>
+    </div>
+
+    <div class="foot">
+      <p class="note" id="storageNote">Data is saved automatically. Setting up&hellip;</p>
+      <div style="display:flex;gap:8px">
+        <button class="btn-ghost" id="undoBtn">Undo last week</button>
+        <button class="btn-ghost" id="resetBtn">Reset contest</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+let state = null;
+let chart = null;
+
+const $ = id => document.getElementById(id);
+const round1 = n => Math.round(n * 10) / 10;
+
+function toast(msg) {
+  const t = $("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  clearTimeout(t._h);
+  t._h = setTimeout(() => t.classList.remove("show"), 2200);
+}
+
+/* ====================================================================
+   SYNC ENGINE
+   - localStorage: instant per-browser cache (never lose data)
+   - shared cloud bin (jsonblob.com, no account): the common scoreboard
+   - one invite link (#c=<id>) ties both people to the same bin
+   ==================================================================== */
+const LKEY = "wlc-cache-v1";
+const REMOTE = "https://jsonblob.com/api/jsonBlob";
+let contestId = null;
+let syncStatus = "local";     // local | syncing | synced | offline
+let lastSync = 0;
+let pollTimer = null;
+let busy = false, pendingPush = false;
+let memCache = null;
+
+const clone = o => JSON.parse(JSON.stringify(o));
+const emptyState = () => ({ setup: false, _t: 0 });
+
+/* ---- local cache ---- */
+function readLocal() {
+  try { const v = localStorage.getItem(LKEY); return v ? JSON.parse(v) : null; }
+  catch (e) { return memCache; }
+}
+function writeLocal(s) {
+  try { localStorage.setItem(LKEY, JSON.stringify(s)); }
+  catch (e) { memCache = s; }
+}
+
+/* ---- url / link helpers ---- */
+function parseContestId() {
+  const m = (location.hash || "").match(/c=([A-Za-z0-9_-]+)/);
+  return m ? m[1] : null;
+}
+function putIdInUrl(id) {
+  try { history.replaceState(null, "", location.pathname + location.search + "#c=" + id); }
+  catch (e) { location.hash = "c=" + id; }
+}
+function inviteLink() { return location.href.split("#")[0] + "#c=" + contestId; }
+
+/* ---- remote ops (no auth) ---- */
+async function remoteCreate(obj) {
+  const res = await fetch(REMOTE, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Accept": "application/json" },
+    body: JSON.stringify(obj)
+  });
+  if (res.status !== 200 && res.status !== 201) throw new Error("create " + res.status);
+  let id = res.headers.get("X-jsonblob");
+  if (!id) { const loc = res.headers.get("Location"); if (loc) id = loc.split("/").pop(); }
+  if (!id) throw new Error("no id");
+  return id;
+}
+async function remoteGet(id) {
+  const res = await fetch(REMOTE + "/" + id, {
+    method: "GET", headers: { "Accept": "application/json" }, cache: "no-store"
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error("get " + res.status);
+  return await res.json();
+}
+async function remotePut(id, obj) {
+  const res = await fetch(REMOTE + "/" + id, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", "Accept": "application/json" },
+    body: JSON.stringify(obj)
+  });
+  if (!res.ok) throw new Error("put " + res.status);
+  return true;
+}
+
+/* ---- merge: union of weeks, fill blanks, newer wins real conflicts ---- */
+function mergeStates(a, b) {
+  if (!a) return b ? clone(b) : null;
+  if (!b) return clone(a);
+  const newer = (a._t || 0) >= (b._t || 0) ? a : b;
+  const base  = (a.setup && !b.setup) ? a : (!a.setup && b.setup) ? b : newer;
+  const out = {
+    setup: !!(a.setup || b.setup),
+    goal: base.goal,
+    people: base.people ? clone(base.people) : undefined,
+    weeks: [],
+    _t: Math.max(a._t || 0, b._t || 0)
+  };
+  if (!out.setup) return out;
+  const byN = {};
+  const fold = (s, t) => {
+    (s.weeks || []).forEach(wk => {
+      const cur = byN[wk.n] || (byN[wk.n] = { n: wk.n, w: [null, null], s: [0, 0] });
+      [0, 1].forEach(i => {
+        const v = wk.weights ? wk.weights[i] : null;
+        if (v == null) return;
+        if (cur.w[i] == null) { cur.w[i] = v; cur.s[i] = t; }
+        else if (cur.w[i] !== v && t > cur.s[i]) { cur.w[i] = v; cur.s[i] = t; }
+      });
+    });
+  };
+  fold(a, a._t || 0); fold(b, b._t || 0);
+  out.weeks = Object.values(byN)
+    .map(x => ({ n: x.n, weights: x.w }))
+    .sort((p, q) => p.n - q.n);
+  return out;
+}
+
+/* ---- status bar ---- */
+function timeAgo(ms) {
+  if (!ms) return "";
+  const s = Math.round((Date.now() - ms) / 1000);
+  if (s < 10) return "just now";
+  if (s < 60) return s + "s ago";
+  const m = Math.round(s / 60);
+  if (m < 60) return m + "m ago";
+  return Math.round(m / 60) + "h ago";
+}
+function updateSyncBar() {
+  const dot = $("syncDot"), txt = $("syncText");
+  const share = $("shareBtn"), copy = $("copyBtn"), link = $("syncLink");
+  if (!dot) return;
+  share.style.display = "none"; copy.style.display = "none"; link.style.display = "none";
+  dot.className = "syncdot";
+
+  if (!contestId) {
+    txt.innerHTML = "Private to this browser " +
+      "<span class='meta'>&middot; not shared yet</span>";
+    share.style.display = ""; share.textContent = "Create shared link";
+  } else if (syncStatus === "syncing") {
+    dot.classList.add("work");
+    txt.innerHTML = "Syncing&hellip;";
+    copy.style.display = ""; link.style.display = "";
+  } else if (syncStatus === "offline") {
+    dot.classList.add("off");
+    txt.innerHTML = "Can&rsquo;t reach sync " +
+      "<span class='meta'>&middot; saved locally, will retry</span>";
+    copy.style.display = ""; link.style.display = "";
+  } else {
+    dot.classList.add("ok");
+    txt.innerHTML = "Shared &amp; synced " +
+      "<span class='meta'>&middot; updated " + timeAgo(lastSync) + "</span>";
+    copy.style.display = ""; link.style.display = "";
+  }
+  if (contestId) {
+    link.textContent = inviteLink();
+    link.href = inviteLink();
+  }
+  const note = $("storageNote");
+  if (note) {
+    note.innerHTML = contestId
+      ? "&#10003; This contest is shared. Anyone with the invite link sees the same " +
+        "scoreboard, on any device. Each browser also keeps its own backup copy."
+      : "Saved on this device. Press <b>Create shared link</b> above, then send the " +
+        "link to your coworker so you both track the same contest.";
+  }
+}
+
+/* ---- lifecycle ---- */
+async function init() {
+  contestId = parseContestId();
+  const local = readLocal();
+  if (contestId) {
+    syncStatus = "syncing";
+    try {
+      const remote = await remoteGet(contestId);
+      if (remote === null) {        // link/bin no longer exists
+        state = local || emptyState();
+        syncStatus = "offline";
+      } else {
+        state = mergeStates(local, remote) || emptyState();
+        writeLocal(state);
+        try { await remotePut(contestId, state); } catch (e) {}
+        syncStatus = "synced"; lastSync = Date.now();
+      }
+    } catch (e) {
+      state = local || emptyState();
+      syncStatus = "offline";
+    }
+    startPoll();
+  } else {
+    state = local || emptyState();
+    syncStatus = "local";
+  }
+  if (!state) state = emptyState();
+}
+
+async function save() {
+  state._t = Date.now();
+  writeLocal(state);
+  render();
+  if (!contestId) { syncStatus = "local"; updateSyncBar(); return; }
+  if (busy) { pendingPush = true; return; }
+  busy = true; syncStatus = "syncing"; updateSyncBar();
+  try {
+    let remote = null;
+    try { remote = await remoteGet(contestId); } catch (e) {}
+    if (remote) state = mergeStates(state, remote);
+    state._t = Date.now();
+    await remotePut(contestId, state);
+    writeLocal(state);
+    syncStatus = "synced"; lastSync = Date.now();
+  } catch (e) {
+    syncStatus = "offline";
+  } finally {
+    busy = false;
+    render(); updateSyncBar();
+    if (pendingPush) { pendingPush = false; save(); }
+  }
+}
+
+function startPoll() {
+  if (pollTimer) return;
+  pollTimer = setInterval(pollOnce, 12000);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) pollOnce();
+  });
+}
+async function pollOnce() {
+  if (!contestId || busy || document.hidden) return;
+  try {
+    const remote = await remoteGet(contestId);
+    if (remote && (remote._t || 0) > (state._t || 0)) {
+      state = mergeStates(state, remote);
+      writeLocal(state);
+      render();
+    }
+    syncStatus = "synced"; lastSync = Date.now();
+  } catch (e) { syncStatus = "offline"; }
+  updateSyncBar();
+}
+
+async function enableSharing() {
+  try {
+    syncStatus = "syncing"; updateSyncBar();
+    if (!state) state = emptyState();
+    state._t = Date.now();
+    const id = await remoteCreate(state);
+    contestId = id; putIdInUrl(id);
+    writeLocal(state);
+    syncStatus = "synced"; lastSync = Date.now();
+    startPoll();
+    updateSyncBar();
+    copyInvite(true);
+    toast("Shareable link created & copied");
+  } catch (e) {
+    syncStatus = contestId ? "offline" : "local";
+    updateSyncBar();
+    toast("Couldn't reach the sync service — try the backup code");
+  }
+}
+
+/* ---- clipboard ---- */
+function fallbackCopy(text, cb) {
+  const ta = document.createElement("textarea");
+  ta.value = text;
+  ta.style.position = "fixed"; ta.style.opacity = "0";
+  document.body.appendChild(ta); ta.focus(); ta.select();
+  try { document.execCommand("copy"); } catch (e) {}
+  document.body.removeChild(ta);
+  cb && cb();
+}
+function copyInvite(silent) {
+  const link = inviteLink();
+  const done = () => { if (!silent) toast("Invite link copied"); };
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(link).then(done).catch(() => fallbackCopy(link, done));
+  } else fallbackCopy(link, done);
+}
+
+/* ---------- Render router ---------- */
+function render() {
+  if (!state || !state.setup) {
+    $("setup").classList.remove("hidden");
+    $("dash").classList.add("hidden");
+    $("subline").textContent = "Enter both competitors to begin.";
+  } else {
+    $("setup").classList.add("hidden");
+    $("dash").classList.remove("hidden");
+    renderDash();
+  }
+}
+
+/* ---------- Setup ---------- */
+$("startBtn").onclick = async () => {
+  const n0 = $("n0").value.trim() || "Competitor 1";
+  const n1 = $("n1").value.trim() || "Competitor 2";
+  const w0 = parseFloat($("w0").value);
+  const w1 = parseFloat($("w1").value);
+  const goal = parseFloat($("goal").value);
+  if (!(w0 > 0) || !(w1 > 0)) { toast("Enter both starting weights"); return; }
+  if (!(goal > 0)) { toast("Enter a valid goal"); return; }
+  state = {
+    setup: true,
+    goal: round1(goal),
+    people: [
+      { name: n0, start: round1(w0) },
+      { name: n1, start: round1(w1) }
+    ],
+    weeks: []   // [{ n:1, weights:[a,b] }]
+  };
+  await save();
+  render();
+};
+
+/* ---------- Dashboard ---------- */
+function lostFor(p, latest) {
+  return round1(p.start - latest);
+}
+function latestWeight(idx) {
+  for (let i = state.weeks.length - 1; i >= 0; i--) {
+    const v = state.weeks[i].weights[idx];
+    if (v != null) return v;
+  }
+  return state.people[idx].start;
+}
+
+function renderDash() {
+  const g = state.goal;
+  const sc = $("scorecards");
+  sc.innerHTML = "";
+
+  const lost = [0, 1].map(i => lostFor(state.people[i], latestWeight(i)));
+  const pct  = [0, 1].map(i => Math.max(0, Math.min(100, (lost[i] / g) * 100)));
+
+  [0, 1].map(i => {
+    const p = state.people[i];
+    const cur = latestWeight(i);
+    const target = round1(p.start - g);
+    const remaining = round1(Math.max(0, cur - target));
+    const cls = i === 0 ? "a" : "b";
+
+    // standing badge
+    let badge = '<span class="pace even">Even</span>';
+    const finished = lost[i] >= g;
+    if (finished) badge = '<span class="pace done">Goal reached \u2713</span>';
+    else if (lost[0] > lost[1]) badge = i === 0
+      ? `<span class="pace win">Leading</span>` : `<span class="pace even">Trailing</span>`;
+    else if (lost[1] > lost[0]) badge = i === 1
+      ? `<span class="pace bwin">Leading</span>` : `<span class="pace even">Trailing</span>`;
+
+    const el = document.createElement("div");
+    el.className = `card scorecard ${cls}`;
+    el.innerHTML = `
+      <div class="name-row">
+        <span class="dot"></span>
+        <span class="name">${escapeHtml(p.name)}</span>
+        ${badge}
+      </div>
+      <div class="big">${cur}<small> lbs</small></div>
+      <div class="lost"><b>${lost[i] >= 0 ? "\u2212" + lost[i] : "+" + Math.abs(lost[i])} lbs</b>
+        &nbsp;from start of ${p.start}&nbsp;&middot;&nbsp;target ${target}</div>
+      <div class="bar"><span style="width:${pct[i]}%"></span></div>
+      <div class="bar-label">
+        <span>${round1(Math.max(0, lost[i]))} / ${g} lbs lost</span>
+        <span>${finished ? "Done!" : remaining + " lbs to go"}</span>
+      </div>`;
+    sc.appendChild(el);
+  });
+
+  // weigh-in inputs
+  const nextWeek = state.weeks.length + 1;
+  $("weekFlag").textContent = "Week " + nextWeek;
+  const wi = $("weighInputs");
+  wi.innerHTML = [0, 1].map(i => `
+    <label class="fld">
+      <span class="lab" style="display:flex;align-items:center;gap:7px">
+        <span class="dot" style="background:var(--${i===0?'a':'b'})"></span>
+        ${escapeHtml(state.people[i].name)} &mdash; weight (lbs)
+      </span>
+      <input type="number" id="in${i}" step="0.1" inputmode="decimal"
+        placeholder="${latestWeight(i)}" />
+    </label>`).join("");
+
+  renderTable();
+  renderChart();
+
+  const wk = state.weeks.length;
+  $("subline").textContent = wk === 0
+    ? "Goal: lose " + g + " lbs each. Log week 1 to get started."
+    : wk + (wk === 1 ? " week" : " weeks") + " logged \u00b7 first to \u2212" + g + " lbs wins.";
+}
+
+/* ---------- Log weigh-in ---------- */
+$("logBtn").onclick = async () => {
+  const a = parseFloat($("in0").value);
+  const b = parseFloat($("in1").value);
+  if (!(a > 0) && !(b > 0)) { toast("Enter at least one weight"); return; }
+  state.weeks.push({
+    n: state.weeks.length + 1,
+    weights: [a > 0 ? round1(a) : null, b > 0 ? round1(b) : null]
+  });
+  await save();
+  renderDash();
+  toast("Week " + state.weeks.length + " saved");
+};
+
+$("undoBtn").onclick = async () => {
+  if (!state.weeks.length) { toast("Nothing to undo"); return; }
+  if (!confirm("Remove the most recent week's weigh-in?")) return;
+  state.weeks.pop();
+  await save();
+  renderDash();
+  toast("Last week removed");
+};
+
+$("resetBtn").onclick = async () => {
+  const msg = contestId
+    ? "Reset the contest for BOTH of you and start over? This clears all data on the shared scoreboard."
+    : "Reset everything and start a new contest? This clears all data.";
+  if (!confirm(msg)) return;
+  state = emptyState();
+  state._t = Date.now();
+  writeLocal(state);
+  if (contestId) {
+    try { await remotePut(contestId, state); lastSync = Date.now(); }
+    catch (e) { syncStatus = "offline"; }
+  }
+  ["n0","n1","w0","w1"].forEach(id => $(id).value = "");
+  $("goal").value = "10";
+  render();
+  updateSyncBar();
+  toast("Contest reset");
+};
+
+/* ---- sync bar buttons ---- */
+$("shareBtn").onclick = enableSharing;
+$("copyBtn").onclick = () => copyInvite(false);
+$("syncLink").onclick = (e) => { e.preventDefault(); copyInvite(false); };
+
+$("exportBtn").onclick = () => {
+  try {
+    const code = btoa(unescape(encodeURIComponent(JSON.stringify(state))));
+    $("codeBox").value = code;
+    const done = () => toast("Backup code copied — send it over");
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(code).then(done).catch(() => fallbackCopy(code, done));
+    } else fallbackCopy(code, done);
+  } catch (e) { toast("Couldn't build code"); }
+};
+
+$("importBtn").onclick = async () => {
+  const raw = $("codeBox").value.trim();
+  if (!raw) { toast("Paste a code first"); return; }
+  let incoming;
+  try { incoming = JSON.parse(decodeURIComponent(escape(atob(raw)))); }
+  catch (e) { toast("That code isn't valid"); return; }
+  state = mergeStates(state, incoming) || state;
+  state._t = Date.now();
+  writeLocal(state);
+  if (contestId) {
+    try { await remotePut(contestId, state); lastSync = Date.now(); syncStatus = "synced"; }
+    catch (e) { syncStatus = "offline"; }
+  }
+  $("codeBox").value = "";
+  render();
+  updateSyncBar();
+  toast("Codes merged \u2014 scoreboard updated");
+};
+
+/* ---------- Table ---------- */
+function renderTable() {
+  const area = $("tableArea");
+  if (!state.weeks.length) {
+    area.innerHTML = `<div class="empty">No weigh-ins yet. Log week 1 above to start the graph.</div>`;
+    return;
+  }
+  let rows = "";
+  const prev = [state.people[0].start, state.people[1].start];
+  state.weeks.forEach(w => {
+    const cells = [0, 1].map(i => {
+      const v = w.weights[i];
+      if (v == null) return `<td>&mdash;</td>`;
+      const d = round1(v - prev[i]);
+      prev[i] = v;
+      const cl = d < 0 ? "down" : d > 0 ? "up" : "";
+      const sign = d < 0 ? "\u2212" + Math.abs(d) : d > 0 ? "+" + d : "0";
+      return `<td>${v}<div class="delta ${cl}">${sign}</div></td>`;
+    }).join("");
+    rows += `<tr><td>Week ${w.n}</td>${cells}</tr>`;
+  });
+  area.innerHTML = `
+    <table>
+      <thead><tr>
+        <th>&nbsp;</th>
+        <th>${escapeHtml(state.people[0].name)}</th>
+        <th>${escapeHtml(state.people[1].name)}</th>
+      </tr></thead>
+      <tbody>
+        <tr><td>Start</td><td>${state.people[0].start}</td><td>${state.people[1].start}</td></tr>
+        ${rows}
+      </tbody>
+    </table>`;
+}
+
+/* ---------- Chart ---------- */
+function renderChart() {
+  const ctx = $("chart").getContext("2d");
+  const labels = ["Start", ...state.weeks.map(w => "Wk " + w.n)];
+
+  const seriesFor = i => {
+    const arr = [state.people[i].start];
+    state.weeks.forEach(w => arr.push(w.weights[i] != null ? w.weights[i] : null));
+    return arr;
+  };
+  const tA = round1(state.people[0].start - state.goal);
+  const tB = round1(state.people[1].start - state.goal);
+
+  const css = getComputedStyle(document.documentElement);
+  const colA = css.getPropertyValue("--a").trim();
+  const colB = css.getPropertyValue("--b").trim();
+  const grid = css.getPropertyValue("--line").trim();
+  const muted = css.getPropertyValue("--muted").trim();
+
+  const data = {
+    labels,
+    datasets: [
+      { label: state.people[0].name, data: seriesFor(0), borderColor: colA,
+        backgroundColor: colA, tension: .3, borderWidth: 3, pointRadius: 4,
+        pointHoverRadius: 6, spanGaps: true },
+      { label: state.people[1].name, data: seriesFor(1), borderColor: colB,
+        backgroundColor: colB, tension: .3, borderWidth: 3, pointRadius: 4,
+        pointHoverRadius: 6, spanGaps: true },
+      { label: state.people[0].name + " target", data: labels.map(() => tA),
+        borderColor: colA, borderDash: [5,5], borderWidth: 1.5,
+        pointRadius: 0, tension: 0 },
+      { label: state.people[1].name + " target", data: labels.map(() => tB),
+        borderColor: colB, borderDash: [5,5], borderWidth: 1.5,
+        pointRadius: 0, tension: 0 }
+    ]
+  };
+
+  const opts = {
+    responsive: true, maintainAspectRatio: false,
+    interaction: { intersect: false, mode: "index" },
+    plugins: {
+      legend: {
+        labels: {
+          font: { family: "Archivo", size: 12, weight: "600" },
+          color: muted, usePointStyle: true, pointStyleWidth: 10,
+          boxHeight: 7, padding: 16,
+          filter: it => !it.text.includes("target")
+        }
+      },
+      tooltip: {
+        backgroundColor: "#1c1b19", padding: 12, cornerRadius: 8,
+        titleFont: { family: "Archivo", weight: "700" },
+        bodyFont: { family: "Archivo" },
+        callbacks: {
+          label: c => c.parsed.y == null ? null
+            : ` ${c.dataset.label}: ${c.parsed.y} lbs`
+        }
+      }
+    },
+    scales: {
+      y: {
+        grid: { color: grid }, border: { display: false },
+        ticks: { font: { family: "Archivo", size: 12 }, color: muted,
+                 callback: v => v + " lb" }
+      },
+      x: {
+        grid: { display: false }, border: { color: grid },
+        ticks: { font: { family: "Archivo", size: 12 }, color: muted }
+      }
+    }
+  };
+
+  if (chart) { chart.data = data; chart.options = opts; chart.update(); }
+  else chart = new Chart(ctx, { type: "line", data, options: opts });
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c =>
+    ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+}
+
+/* ---------- Boot ---------- */
+(async () => {
+  await init();
+  render();
+  updateSyncBar();
+})();
+</script>
