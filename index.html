@@ -248,6 +248,12 @@
     padding: 10px; resize: vertical; background: #faf8f3; color: var(--ink);
   }
   .mrow { display: flex; gap: 8px; margin-top: 10px; }
+  .epbox {
+    flex: 1; font-family: ui-monospace, Menlo, monospace; font-size: 12px;
+    border: 1px solid var(--line); border-radius: 8px; padding: 10px;
+    background: #faf8f3; color: var(--ink); min-width: 0;
+  }
+  .epbox:focus { outline: none; border-color: var(--a); background: #fff; }
 </style>
 
 <div class="wrap">
@@ -267,16 +273,27 @@
   </div>
 
   <details class="manual" id="manualSync">
-    <summary>Sync trouble? Use a backup code</summary>
+    <summary>Sync options</summary>
     <div class="inner">
-      <p class="mhelp">If the auto&#8209;sync ever can&rsquo;t connect, you can still sync by hand:
-        press <b>Copy my code</b>, send it to the other person, and have them paste it
-        below and press <b>Apply pasted code</b>. It merges both of your numbers.</p>
+      <p class="mhelp"><b>Option A &mdash; Backup code.</b> Works on any network, zero setup.
+        One person presses <b>Copy my code</b> and sends it over (email/Teams); the other
+        pastes it below and presses <b>Apply pasted code</b>. It merges both of your
+        numbers. Do this whenever someone logs a weigh&#8209;in &mdash; perfect for a weekly contest.</p>
       <textarea class="codebox" id="codeBox" placeholder="Paste a backup code here, then press Apply pasted code"></textarea>
       <div class="mrow">
         <button class="syncbtn ghost" id="exportBtn">Copy my code</button>
         <button class="syncbtn ghost" id="importBtn">Apply pasted code</button>
       </div>
+
+      <p class="mhelp" style="margin-top:18px"><b>Option B &mdash; Auto&#8209;sync via your own free server.</b>
+        Paste your sync server URL (Apps Script <b>/exec</b> link) and press Save. Then use
+        <b>Create shared link</b> above &mdash; the invite link will carry the server too, so
+        your coworker just opens it. Truly hands&#8209;off after this.</p>
+      <div class="mrow">
+        <input type="text" id="epBox" class="epbox" placeholder="https://script.google.com/macros/s/.../exec" autocomplete="off" />
+        <button class="syncbtn ghost" id="epSaveBtn">Save</button>
+      </div>
+      <p class="mhelp" id="epStatus" style="margin-top:8px"></p>
     </div>
   </details>
 
@@ -368,7 +385,9 @@ function toast(msg) {
    - one invite link (#c=<id>) ties both people to the same bin
    ==================================================================== */
 const LKEY = "wlc-cache-v1";
+const EPKEY = "wlc-endpoint-v1";
 const REMOTE = "https://jsonblob.com/api/jsonBlob";
+let customEndpoint = null;     // user-owned sync server (Apps Script etc.)
 let contestId = null;
 let syncStatus = "local";     // local | syncing | synced | offline
 let lastSync = 0;
@@ -390,18 +409,67 @@ function writeLocal(s) {
 }
 
 /* ---- url / link helpers ---- */
-function parseContestId() {
-  const m = (location.hash || "").match(/c=([A-Za-z0-9_-]+)/);
-  return m ? m[1] : null;
+function b64url(s) {
+  return btoa(unescape(encodeURIComponent(s)))
+    .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
+function unb64url(s) {
+  s = s.replace(/-/g, "+").replace(/_/g, "/");
+  while (s.length % 4) s += "=";
+  try { return decodeURIComponent(escape(atob(s))); } catch (e) { return null; }
+}
+function parseHash() {
+  const h = location.hash || "";
+  const cm = h.match(/c=([A-Za-z0-9_-]+)/);
+  const sm = h.match(/s=([A-Za-z0-9_-]+)/);
+  return {
+    id: cm ? cm[1] : null,
+    endpoint: sm ? unb64url(sm[1]) : null
+  };
+}
+function parseContestId() { return parseHash().id; }
 function putIdInUrl(id) {
-  try { history.replaceState(null, "", location.pathname + location.search + "#c=" + id); }
-  catch (e) { location.hash = "c=" + id; }
+  let h = "#c=" + id;
+  if (customEndpoint) h += "&s=" + b64url(customEndpoint);
+  try { history.replaceState(null, "", location.pathname + location.search + h); }
+  catch (e) { location.hash = h.slice(1); }
 }
-function inviteLink() { return location.href.split("#")[0] + "#c=" + contestId; }
+function inviteLink() {
+  let h = "#c=" + contestId;
+  if (customEndpoint) h += "&s=" + b64url(customEndpoint);
+  return location.href.split("#")[0] + h;
+}
+function loadEndpoint() {
+  try { return localStorage.getItem(EPKEY) || null; } catch (e) { return null; }
+}
+function saveEndpoint(u) {
+  customEndpoint = u || null;
+  try {
+    if (u) localStorage.setItem(EPKEY, u);
+    else localStorage.removeItem(EPKEY);
+  } catch (e) {}
+}
+function genId() {
+  return Math.random().toString(36).slice(2, 8) +
+         Math.random().toString(36).slice(2, 6);
+}
 
-/* ---- remote ops (no auth) ---- */
+/* ---- remote ops ----
+   Two backends:
+   (1) customEndpoint  -> a server you own (e.g. Google Apps Script).
+       GET  endpoint?id=ID            -> returns the stored JSON (or empty)
+       POST endpoint  (text/plain)    -> body {id, state}; "simple" request,
+                                         so no CORS preflight is triggered.
+       IDs are generated on the client, so nothing depends on reading a
+       response header (that was the fragile part before).
+   (2) jsonblob.com  -> zero-config public bin, used only if no endpoint set.
+*/
 async function remoteCreate(obj) {
+  if (customEndpoint) {
+    const id = genId();
+    await remotePut(id, obj);
+    return id;
+  }
   const res = await fetch(REMOTE, {
     method: "POST",
     headers: { "Content-Type": "application/json", "Accept": "application/json" },
@@ -414,6 +482,20 @@ async function remoteCreate(obj) {
   return id;
 }
 async function remoteGet(id) {
+  if (customEndpoint) {
+    const url = customEndpoint +
+      (customEndpoint.indexOf("?") >= 0 ? "&" : "?") + "id=" + encodeURIComponent(id);
+    const res = await fetch(url, { method: "GET", cache: "no-store" });
+    if (!res.ok) throw new Error("get " + res.status);
+    const txt = (await res.text()).trim();
+    if (!txt || txt === "{}" || txt === "null") return null;
+    let j;
+    try { j = JSON.parse(txt); } catch (e) { return null; }
+    if (!j) return null;
+    if (j.state !== undefined) j = j.state;          // {id,state} wrapper
+    if (!j || j.empty === true) return null;
+    return j;
+  }
   const res = await fetch(REMOTE + "/" + id, {
     method: "GET", headers: { "Accept": "application/json" }, cache: "no-store"
   });
@@ -422,6 +504,15 @@ async function remoteGet(id) {
   return await res.json();
 }
 async function remotePut(id, obj) {
+  if (customEndpoint) {
+    const res = await fetch(customEndpoint, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=UTF-8" },  // no preflight
+      body: JSON.stringify({ id: id, state: obj })
+    });
+    if (!res.ok) throw new Error("post " + res.status);
+    return true;
+  }
   const res = await fetch(REMOTE + "/" + id, {
     method: "PUT",
     headers: { "Content-Type": "application/json", "Accept": "application/json" },
@@ -516,7 +607,11 @@ function updateSyncBar() {
 
 /* ---- lifecycle ---- */
 async function init() {
-  contestId = parseContestId();
+  const h = parseHash();
+  // endpoint priority: link > saved
+  if (h.endpoint) { saveEndpoint(h.endpoint); }
+  else { customEndpoint = loadEndpoint(); }
+  contestId = h.id;
   const local = readLocal();
   if (contestId) {
     syncStatus = "syncing";
@@ -604,7 +699,15 @@ async function enableSharing() {
   } catch (e) {
     syncStatus = contestId ? "offline" : "local";
     updateSyncBar();
-    toast("Couldn't reach the sync service — try the backup code");
+    const panel = $("manualSync");
+    if (panel) { panel.open = true; panel.scrollIntoView({ behavior: "smooth", block: "center" }); }
+    const st = $("epStatus");
+    if (st) st.innerHTML = customEndpoint
+      ? "&#9888; Couldn&rsquo;t reach that server URL. Double&#8209;check it ends in " +
+        "<b>/exec</b> and is deployed for &ldquo;Anyone.&rdquo;"
+      : "&#9888; The free public sync is blocked or unreachable on this network. " +
+        "Use the backup code below, or set up your own server URL (Option B).";
+    toast("Auto-sync unavailable — see the sync options below");
   }
 }
 
@@ -816,6 +919,40 @@ $("importBtn").onclick = async () => {
   toast("Codes merged \u2014 scoreboard updated");
 };
 
+$("epSaveBtn").onclick = async () => {
+  const url = $("epBox").value.trim();
+  const st = $("epStatus");
+  if (!url) {
+    saveEndpoint(null);
+    st.innerHTML = "Cleared. Auto&#8209;sync will use the free public service.";
+    updateSyncBar();
+    return;
+  }
+  if (!/^https:\/\/.+/i.test(url)) {
+    st.innerHTML = "&#9888; That doesn&rsquo;t look like a URL (must start with https://).";
+    return;
+  }
+  saveEndpoint(url);
+  st.innerHTML = "Testing&hellip;";
+  try {
+    const testId = "ping_" + genId();
+    await remotePut(testId, { ping: 1, _t: Date.now() });
+    const back = await remoteGet(testId);
+    if (!back) throw new Error("no read-back");
+    st.innerHTML = "&#10003; Server works and is saved. Now press " +
+      "<b>Create shared link</b> at the top and send the link to your coworker.";
+    if (state && state.setup && !contestId) {
+      $("shareBtn") && ($("shareBtn").style.display = "");
+    }
+    toast("Sync server saved & verified");
+  } catch (e) {
+    st.innerHTML = "&#9888; Saved, but the test call failed. Check that the Web App is " +
+      "deployed with access set to <b>Anyone</b> and the URL ends in <b>/exec</b>. " +
+      "You can still use the backup code above.";
+  }
+  updateSyncBar();
+};
+
 /* ---------- Table ---------- */
 function renderTable() {
   const area = $("tableArea");
@@ -937,5 +1074,6 @@ function escapeHtml(s) {
   await init();
   render();
   updateSyncBar();
+  if (customEndpoint && $("epBox")) $("epBox").value = customEndpoint;
 })();
 </script>
