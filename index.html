@@ -254,6 +254,38 @@
     background: #faf8f3; color: var(--ink); min-width: 0;
   }
   .epbox:focus { outline: none; border-color: var(--a); background: #fff; }
+
+  /* ---------- In-card weigh-in form ---------- */
+  .weighform {
+    margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line);
+  }
+  .weighform .wlab {
+    font-size: 11px; font-weight: 700; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--muted); margin-bottom: 9px;
+  }
+  .wrow { display: flex; gap: 8px; }
+  .wrow input {
+    flex: 1; min-width: 0; font-family: inherit; font-size: 16px; font-weight: 600;
+    color: var(--ink); background: #faf8f3; border: 1px solid var(--line);
+    border-radius: 9px; padding: 10px 12px; outline: none;
+    transition: border-color .15s, background .15s;
+  }
+  .scorecard.a .wrow input:focus { border-color: var(--a); background: #fff; }
+  .scorecard.b .wrow input:focus { border-color: var(--b); background: #fff; }
+  .wrow button {
+    font-family: inherit; font-weight: 700; font-size: 14px; color: #fff;
+    border: none; border-radius: 9px; padding: 10px 18px; cursor: pointer;
+    transition: transform .12s, opacity .15s;
+  }
+  .wrow button:active { transform: translateY(1px); }
+  .scorecard.a .wrow button { background: var(--a); }
+  .scorecard.b .wrow button { background: var(--b); }
+  .undo-link {
+    margin-top: 10px; background: none; border: none; padding: 0;
+    font-family: inherit; font-size: 12px; color: var(--muted);
+    cursor: pointer; text-decoration: underline; text-decoration-style: dotted;
+  }
+  .undo-link:hover { color: var(--ink); }
 </style>
 
 <div class="wrap">
@@ -334,13 +366,6 @@
 
     <div class="grid2" id="scorecards"></div>
 
-    <div class="section card">
-      <h2>Log this week&rsquo;s weigh&#8209;in</h2>
-      <div class="weekflag" id="weekFlag">Week 1</div>
-      <div class="input-row" id="weighInputs"></div>
-      <button class="btn-primary" id="logBtn" style="width:100%">Save weigh&#8209;in</button>
-    </div>
-
     <div class="chart-box card">
       <h2 style="font-size:13px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:14px;padding:0 4px">Progress vs. target</h2>
       <div class="chart-wrap"><canvas id="chart"></canvas></div>
@@ -354,7 +379,6 @@
     <div class="foot">
       <p class="note" id="storageNote">Data is saved automatically. Setting up&hellip;</p>
       <div style="display:flex;gap:8px">
-        <button class="btn-ghost" id="undoBtn">Undo last week</button>
         <button class="btn-ghost" id="resetBtn">Reset contest</button>
       </div>
     </div>
@@ -776,6 +800,54 @@ function latestWeight(idx) {
   return state.people[idx].start;
 }
 
+/* Each person's "next week" = lowest week with their slot empty,
+   or (max existing week) + 1 if they've filled them all so far. */
+function nextWeekFor(i) {
+  const weeks = state.weeks || [];
+  for (let k = 0; k < weeks.length; k++) {
+    if (weeks[k].weights[i] == null) return weeks[k].n;
+  }
+  return (weeks.length ? weeks[weeks.length - 1].n : 0) + 1;
+}
+
+/* Person i's most recently filled week number (or 0 if none) */
+function lastLoggedWeekFor(i) {
+  const weeks = state.weeks || [];
+  for (let k = weeks.length - 1; k >= 0; k--) {
+    if (weeks[k].weights[i] != null) return weeks[k].n;
+  }
+  return 0;
+}
+
+async function logWeightFor(i, weight) {
+  if (!(weight > 0)) { toast("Enter a valid weight"); return; }
+  const n = nextWeekFor(i);
+  let wk = state.weeks.find(w => w.n === n);
+  if (!wk) {
+    wk = { n: n, weights: [null, null] };
+    state.weeks.push(wk);
+    state.weeks.sort((a, b) => a.n - b.n);
+  }
+  wk.weights[i] = round1(weight);
+  await save();
+  toast(state.people[i].name + " \u00b7 Week " + n + " logged");
+}
+
+async function undoLastFor(i) {
+  const n = lastLoggedWeekFor(i);
+  if (!n) { toast("Nothing to undo for " + state.people[i].name); return; }
+  if (!confirm("Undo " + state.people[i].name + "'s Week " + n + " weigh-in?")) return;
+  const wk = state.weeks.find(w => w.n === n);
+  if (!wk) return;
+  wk.weights[i] = null;
+  // if the week is now empty for both, drop it entirely
+  if (wk.weights[0] == null && wk.weights[1] == null) {
+    state.weeks = state.weeks.filter(w => w.n !== n);
+  }
+  await save();
+  toast("Removed " + state.people[i].name + "'s Week " + n);
+}
+
 function renderDash() {
   const g = state.goal;
   const sc = $("scorecards");
@@ -784,12 +856,14 @@ function renderDash() {
   const lost = [0, 1].map(i => lostFor(state.people[i], latestWeight(i)));
   const pct  = [0, 1].map(i => Math.max(0, Math.min(100, (lost[i] / g) * 100)));
 
-  [0, 1].map(i => {
+  [0, 1].forEach(i => {
     const p = state.people[i];
     const cur = latestWeight(i);
     const target = round1(p.start - g);
     const remaining = round1(Math.max(0, cur - target));
     const cls = i === 0 ? "a" : "b";
+    const nextN = nextWeekFor(i);
+    const lastN = lastLoggedWeekFor(i);
 
     // standing badge
     let badge = '<span class="pace even">Even</span>';
@@ -815,55 +889,40 @@ function renderDash() {
       <div class="bar-label">
         <span>${round1(Math.max(0, lost[i]))} / ${g} lbs lost</span>
         <span>${finished ? "Done!" : remaining + " lbs to go"}</span>
+      </div>
+
+      <div class="weighform">
+        <div class="wlab">${escapeHtml(p.name)}&rsquo;s Week ${nextN} weigh&#8209;in</div>
+        <div class="wrow">
+          <input type="number" class="weight-in" step="0.1" inputmode="decimal"
+            placeholder="${cur}" aria-label="${escapeHtml(p.name)} weight in pounds" />
+          <button class="log-btn" type="button">Log Wk ${nextN}</button>
+        </div>
+        ${lastN ? `<button class="undo-link" type="button">Undo my Week ${lastN}</button>` : ""}
       </div>`;
     sc.appendChild(el);
-  });
 
-  // weigh-in inputs
-  const nextWeek = state.weeks.length + 1;
-  $("weekFlag").textContent = "Week " + nextWeek;
-  const wi = $("weighInputs");
-  wi.innerHTML = [0, 1].map(i => `
-    <label class="fld">
-      <span class="lab" style="display:flex;align-items:center;gap:7px">
-        <span class="dot" style="background:var(--${i===0?'a':'b'})"></span>
-        ${escapeHtml(state.people[i].name)} &mdash; weight (lbs)
-      </span>
-      <input type="number" id="in${i}" step="0.1" inputmode="decimal"
-        placeholder="${latestWeight(i)}" />
-    </label>`).join("");
+    // Wire up listeners for this card
+    const input = el.querySelector(".weight-in");
+    const logBtn = el.querySelector(".log-btn");
+    const undoLink = el.querySelector(".undo-link");
+    const doLog = async () => {
+      const v = parseFloat(input.value);
+      await logWeightFor(i, v);
+    };
+    logBtn.addEventListener("click", doLog);
+    input.addEventListener("keydown", e => { if (e.key === "Enter") doLog(); });
+    if (undoLink) undoLink.addEventListener("click", () => undoLastFor(i));
+  });
 
   renderTable();
   renderChart();
 
   const wk = state.weeks.length;
   $("subline").textContent = wk === 0
-    ? "Goal: lose " + g + " lbs each. Log week 1 to get started."
-    : wk + (wk === 1 ? " week" : " weeks") + " logged \u00b7 first to \u2212" + g + " lbs wins.";
+    ? "Goal: lose " + g + " lbs each. Each of you can log independently anytime."
+    : wk + (wk === 1 ? " week" : " weeks") + " on the board \u00b7 first to \u2212" + g + " lbs wins.";
 }
-
-/* ---------- Log weigh-in ---------- */
-$("logBtn").onclick = async () => {
-  const a = parseFloat($("in0").value);
-  const b = parseFloat($("in1").value);
-  if (!(a > 0) && !(b > 0)) { toast("Enter at least one weight"); return; }
-  state.weeks.push({
-    n: state.weeks.length + 1,
-    weights: [a > 0 ? round1(a) : null, b > 0 ? round1(b) : null]
-  });
-  await save();
-  renderDash();
-  toast("Week " + state.weeks.length + " saved");
-};
-
-$("undoBtn").onclick = async () => {
-  if (!state.weeks.length) { toast("Nothing to undo"); return; }
-  if (!confirm("Remove the most recent week's weigh-in?")) return;
-  state.weeks.pop();
-  await save();
-  renderDash();
-  toast("Last week removed");
-};
 
 $("resetBtn").onclick = async () => {
   const msg = contestId
