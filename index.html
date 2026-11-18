@@ -546,18 +546,23 @@ async function remotePut(id, obj) {
   return true;
 }
 
-/* ---- merge: union of weeks, fill blanks, newer wins real conflicts ---- */
+/* ---- merge: union of weeks, fill blanks, newer wins real conflicts ----
+   A side carrying _reset wins unconditionally if its timestamp is >= the
+   other's; this lets "Reset contest" survive round-trips through stale caches. */
 function mergeStates(a, b) {
   if (!a) return b ? clone(b) : null;
   if (!b) return clone(a);
-  const newer = (a._t || 0) >= (b._t || 0) ? a : b;
+  const at = a._t || 0, bt = b._t || 0;
+  if (a._reset && at >= bt) return clone(a);
+  if (b._reset && bt >= at) return clone(b);
+  const newer = at >= bt ? a : b;
   const base  = (a.setup && !b.setup) ? a : (!a.setup && b.setup) ? b : newer;
   const out = {
     setup: !!(a.setup || b.setup),
     goal: base.goal,
     people: base.people ? clone(base.people) : undefined,
     weeks: [],
-    _t: Math.max(a._t || 0, b._t || 0)
+    _t: Math.max(at, bt)
   };
   if (!out.setup) return out;
   const byN = {};
@@ -929,18 +934,45 @@ $("resetBtn").onclick = async () => {
     ? "Reset the contest for BOTH of you and start over? This clears all data on the shared scoreboard."
     : "Reset everything and start a new contest? This clears all data.";
   if (!confirm(msg)) return;
+
+  // Pause the background poller so a slow remote read can't resurrect old data
+  // between our local wipe and our remote overwrite.
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+  busy = true;
+
+  // Fresh empty state, marked as a reset and timestamped slightly ahead so it
+  // wins any merge with a stale remote/local copy.
   state = emptyState();
-  state._t = Date.now();
+  state._t = Date.now() + 1000;
+  state._reset = state._t;
   writeLocal(state);
+
+  // Also clear any old cached values we might reload from
+  try { localStorage.removeItem(LKEY); } catch (e) {}
+  writeLocal(state);
+
+  // Blow away the remote copy if we're in a shared contest.
+  let remoteOK = true;
   if (contestId) {
-    try { await remotePut(contestId, state); lastSync = Date.now(); }
-    catch (e) { syncStatus = "offline"; }
+    try {
+      await remotePut(contestId, state);
+      lastSync = Date.now();
+      syncStatus = "synced";
+    } catch (e) {
+      remoteOK = false;
+      syncStatus = "offline";
+    }
   }
+
   ["n0","n1","w0","w1"].forEach(id => $(id).value = "");
   $("goal").value = "10";
+
+  busy = false;
+  if (contestId) startPoll();
+
   render();
   updateSyncBar();
-  toast("Contest reset");
+  toast(remoteOK ? "Contest reset" : "Reset locally — couldn't reach shared copy");
 };
 
 /* ---- sync bar buttons ---- */
